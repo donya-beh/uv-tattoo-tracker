@@ -1,22 +1,43 @@
-# UV Tattoo Tracker
+# ☀️ UV Tattoo Tracker
 
-A static web app that lets you search any location and instantly see the current UV index, an hourly UV distribution chart for the day, and a plain-English recommendation on whether to cover your tattoo before heading outside. UV data refreshes automatically every 30 minutes. No API keys required — the app calls the free [Open-Meteo](https://open-meteo.com) UV and geocoding APIs directly from the browser.
+A web app built for people with fresh tattoos who want to know when it's safe to go outside without covering up.
 
-## Prerequisites
+## What it does
 
-- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) configured with appropriate credentials
-- [Node.js](https://nodejs.org) (v18+) — only needed to run tests locally
+You type in any location — a city, zip code, or address — and the app instantly shows you the current UV index for that location along with a plain-English recommendation on whether your tattoo needs protection.
+
+UV data refreshes automatically every 30 minutes so you always have an up-to-date reading without needing to reload the page.
+
+## What it shows
+
+- **Current UV index** — the real-time UV level for your searched location, color-coded by severity (green for low, yellow for moderate, orange for high, red for very high, violet for extreme)
+- **Severity label** — Low / Moderate / High / Very High / Extreme based on the WHO UV scale
+- **Tattoo recommendation** — a single clear line telling you either:
+  - "UV is low — safe to go outside without covering your tattoo."
+  - "UV is moderate to extreme — cover your tattoo before going outside."
+- **Local time** — the current time at the searched location with timezone
+- **Today's UV forecast chart** — an hourly line chart showing UV levels from sunrise to sunset, so you can plan ahead and pick the safest window to head outside
+
+## Live app
+
+[https://dz7n0r078z997.cloudfront.net](https://dz7n0r078z997.cloudfront.net)
+
+## Tech stack
+
+- Plain HTML, CSS, and vanilla JavaScript — no framework, no build step
+- [currentuvindex.com](https://currentuvindex.com) — free, keyless UV index API
+- [Open-Meteo Geocoding API](https://open-meteo.com) — free, keyless location search
+- [sunrise-sunset.org](https://sunrise-sunset.org/api) — free, keyless sunrise/sunset times
+- [Chart.js](https://www.chartjs.org) — UV forecast chart
+- Hosted on AWS S3 + CloudFront
 
 ## Deployment
 
-### 1. Create an S3 bucket with static website hosting
+### 1. Create S3 bucket with static website hosting
 
 ```bash
 aws s3 mb s3://YOUR_BUCKET_NAME --region YOUR_REGION
-
-aws s3 website s3://YOUR_BUCKET_NAME \
-  --index-document index.html \
-  --error-document index.html
+aws s3 website s3://YOUR_BUCKET_NAME --index-document index.html --error-document index.html
 ```
 
 ### 2. Apply the bucket policy
@@ -27,34 +48,19 @@ aws s3api put-bucket-policy \
   --policy file://infra/s3-bucket-policy.json
 ```
 
-> Replace `YOUR_BUCKET_NAME` inside `infra/s3-bucket-policy.json` with your actual bucket name before running this command.
-
-### 3. Upload the app files
+### 3. Upload app files
 
 ```bash
-aws s3 sync . s3://YOUR_BUCKET_NAME \
-  --exclude ".*" \
-  --exclude "node_modules/*" \
-  --exclude "tests/*" \
-  --exclude "infra/*" \
-  --exclude "*.md" \
-  --include "index.html" \
-  --include "app.js" \
-  --include "style.css"
+aws s3 cp index.html s3://YOUR_BUCKET_NAME/ --content-type "text/html"
+aws s3 cp app.js s3://YOUR_BUCKET_NAME/ --content-type "application/javascript"
+aws s3 cp style.css s3://YOUR_BUCKET_NAME/ --content-type "text/css"
 ```
 
 ### 4. Create a CloudFront distribution
 
-Follow the settings described in [`infra/cloudfront-config.md`](infra/cloudfront-config.md) to create a CloudFront distribution pointing to the S3 website endpoint. Key settings:
+See [`infra/cloudfront-config.md`](infra/cloudfront-config.md) for settings.
 
-- Origin: `YOUR_BUCKET_NAME.s3-website-YOUR_REGION.amazonaws.com`
-- Default root object: `index.html`
-- Viewer protocol policy: Redirect HTTP to HTTPS
-- Price class: PriceClass_100
-
-### 5. Invalidate the CloudFront cache after updates
-
-After re-uploading files, invalidate the cache so users get the latest version:
+### 5. Invalidate cache after updates
 
 ```bash
 aws cloudfront create-invalidation \
@@ -62,15 +68,14 @@ aws cloudfront create-invalidation \
   --paths "/*"
 ```
 
-## Running Tests Locally
+## Running tests locally
 
 ```bash
 npm install && npm test
 ```
 
-## AWS Free Tier Notes
+Or with Python (no Node required):
 
-- **S3**: 5 GB storage, 20,000 GET requests, and 2,000 PUT requests per month free for 12 months.
-- **CloudFront**: 1 TB data transfer out and 10,000,000 HTTP/HTTPS requests per month free for 12 months.
-- This app makes no server-side API calls — all UV and geocoding requests go directly from the browser to Open-Meteo, so there are no Lambda or API Gateway costs.
-- After the free tier period, costs for a low-traffic static site like this are typically a few cents per month.
+```bash
+python3 tests/logic_test.py
+```
