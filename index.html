@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UV Tattoo Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>☀️ UV Tattoo Tracker</h1>
+    <p>Check UV levels before heading outside with your fresh ink.</p>
+  </header>
+
+  <main>
+    <form id="search-form" aria-label="Location search">
+      <label for="location-input">Search location</label>
+      <input
+        type="text"
+        id="location-input"
+        name="location"
+        placeholder="City, postal code, or address"
+        autocomplete="off"
+        required
+      />
+      <button type="submit">Search</button>
+    </form>
+
+    <div id="error-banner" class="hidden" role="alert" aria-live="polite"></div>
+
+    <section id="results" class="hidden" aria-label="UV results">
+      <div id="location-display"></div>
+
+      <div id="uv-current" aria-label="Current UV index">
+        <div class="uv-value"></div>
+        <div class="uv-label"></div>
+      </div>
+
+      <div id="recommendation" aria-label="Tattoo recommendation"></div>
+
+      <div id="uv-chart-section" aria-label="UV distribution chart">
+        <h3>Today's UV Forecast</h3>
+        <canvas id="uv-chart"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

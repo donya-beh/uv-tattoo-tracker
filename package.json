@@ -1,0 +1,12 @@
+{
+  "name": "uv-tattoo-tracker",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "test": "vitest --run"
+  },
+  "devDependencies": {
+    "fast-check": "^3.15.0",
+    "vitest": "^1.6.0"
+  }
+}
