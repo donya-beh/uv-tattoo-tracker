@@ -283,174 +283,10 @@ function updateUI(locationData, uvData) {
 let state = {
   location: null,
   uvData: null,
-  sunTimes: null,
   currentUV: null,
   refreshTimer: null,
   lastUpdated: null,
 };
-
-/** @type {Chart|null} */
-let uvChart = null;
-
-/**
- * Renders or updates a Chart.js line chart on the #uv-chart canvas.
- * @param {{ time: string[], uv_index: number[] }} hourlyData
- * @param {string} timezone - IANA timezone string e.g. "Europe/London"
- */
-function renderChart(uvData, sunTimes) {
-  const canvas = document.getElementById("uv-chart");
-  if (!canvas) return;
-
-  if (uvChart !== null) {
-    uvChart.destroy();
-    uvChart = null;
-  }
-
-  const timezone = uvData.timezone;
-  const forecast = uvData.forecast;
-
-  // Filter to today in the location's timezone
-  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
-  const todayEntries = forecast.filter(entry => {
-    const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date(entry.time));
-    return localDate === todayStr;
-  });
-  const allToday = todayEntries.length > 0 ? todayEntries : forecast.slice(0, 24);
-
-  // Filter to sunrise–sunset window if available, with 1hr padding each side
-  let entries = allToday;
-  if (sunTimes) {
-    const padMs = 60 * 60 * 1000;
-    const windowStart = new Date(sunTimes.sunrise.getTime() - padMs);
-    const windowEnd   = new Date(sunTimes.sunset.getTime()  + padMs);
-    const daylight = allToday.filter(e => {
-      const t = new Date(e.time);
-      return t >= windowStart && t <= windowEnd;
-    });
-    // Only use daylight window if it has meaningful data
-    if (daylight.length >= 2) entries = daylight;
-  }
-
-  // Format X-axis labels as "H AM/PM" in the location's timezone
-  const labels = entries.map(entry => {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      hour: "numeric",
-      hour12: true,
-    }).format(new Date(entry.time));
-  });
-
-  const uvValues = entries.map(e => e.uvi);
-
-  // Find current hour index
-  const nowLocal = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", hour12: false }).format(new Date());
-  const currentHourIdx = entries.findIndex(entry => {
-    const h = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", hour12: false }).format(new Date(entry.time));
-    return h === nowLocal;
-  });
-
-  const pointColors = uvValues.map(uv => getUVCategory(uv).color);
-  const pointRadii = uvValues.map((_, i) => i === currentHourIdx ? 8 : 3);
-  const maxUV = Math.max(...uvValues, 0);
-  const yMax = Math.ceil(maxUV) + 1;
-
-  // Custom plugin: draw colored background bands for UV severity zones
-  const uvBandsPlugin = {
-    id: "uvBands",
-    beforeDraw(chart) {
-      const { ctx, chartArea, scales } = chart;
-      if (!chartArea) return;
-      const yScale = scales.y;
-      const bands = [
-        { min: 0,  max: 2,        color: "rgba(76,175,80,0.15)"  },  // Low
-        { min: 2,  max: 5,        color: "rgba(255,235,59,0.15)" },  // Moderate
-        { min: 5,  max: 7,        color: "rgba(255,152,0,0.15)"  },  // High
-        { min: 7,  max: 10,       color: "rgba(244,67,54,0.15)"  },  // Very High
-        { min: 10, max: yMax + 1, color: "rgba(156,39,176,0.15)" },  // Extreme
-      ];
-      ctx.save();
-      for (const band of bands) {
-        const yTop    = yScale.getPixelForValue(Math.min(band.max, yScale.max));
-        const yBottom = yScale.getPixelForValue(Math.max(band.min, yScale.min));
-        if (yBottom <= yTop) continue;
-        ctx.fillStyle = band.color;
-        ctx.fillRect(chartArea.left, yTop, chartArea.right - chartArea.left, yBottom - yTop);
-      }
-      ctx.restore();
-    },
-  };
-
-  // Custom plugin: draw a vertical line at the current hour
-  const currentHourLinePlugin = {
-    id: "currentHourLine",
-    afterDraw(chart) {
-      if (currentHourIdx < 0) return;
-      const { ctx, chartArea, scales } = chart;
-      const xScale = scales.x;
-      const x = xScale.getPixelForValue(currentHourIdx);
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(x, chartArea.top);
-      ctx.lineTo(x, chartArea.bottom);
-      ctx.strokeStyle = "rgba(0,0,0,0.5)";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.stroke();
-      ctx.restore();
-    },
-  };
-
-  uvChart = new Chart(canvas, {
-    type: "line",
-    plugins: [uvBandsPlugin, currentHourLinePlugin],
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "UV Index",
-      data: uvValues,
-          borderColor: "rgba(255,255,255,0.9)",
-          borderWidth: 2.5,
-          pointBackgroundColor: pointColors,
-          pointRadius: pointRadii,
-          pointHoverRadius: 6,
-          tension: 0.4,
-          fill: false,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      scales: {
-        x: {
-          title: { display: false },
-          ticks: { color: "rgba(255,255,255,0.7)", font: { size: 11 } },
-          grid: { color: "rgba(255,255,255,0.1)" },
-        },
-        y: {
-          min: 0,
-          max: yMax,
-          title: { display: false },
-          ticks: { color: "rgba(255,255,255,0.7)", font: { size: 11 } },
-          grid: { color: "rgba(255,255,255,0.1)" },
-        },
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: "rgba(0,0,0,0.7)",
-          callbacks: {
-            label: (ctx) => {
-              const uv = ctx.parsed.y;
-              const cat = getUVCategory(uv);
-              return `UV ${uv} — ${cat.label}`;
-            },
-          },
-        },
-      },
-    },
-  });
-}
 
 /**
  * Starts (or restarts) a 30-minute auto-refresh interval.
@@ -472,14 +308,13 @@ function startAutoRefresh(lat, lon, timezone) {
       state.currentUV = getCurrentUVIndex(uvData);
       state.lastUpdated = new Date();
       updateUI(state.location, uvData);
-      renderChart(uvData, state.sunTimes);
     } catch (err) {
       handleError("AUTO_REFRESH_FAILED");
     }
   }, 30 * 60 * 1000);
 }
 
-if (typeof module !== "undefined") module.exports = { UV_CATEGORIES, getUVCategory, getTattooRecommendation, getCurrentUVIndex, getLocalTime, fetchUVData, handleError, updateUI, renderChart, startAutoRefresh, state };
+if (typeof module !== "undefined") module.exports = { UV_CATEGORIES, getUVCategory, getTattooRecommendation, getCurrentUVIndex, getLocalTime, fetchUVData, handleError, updateUI, startAutoRefresh, state };
 
 if (typeof document !== "undefined") {
   document.addEventListener("DOMContentLoaded", () => {
@@ -493,20 +328,14 @@ if (typeof document !== "undefined") {
 
       try {
         const locationData = await searchLocation(query);
-        const [uvData, sunTimes] = await Promise.all([
-          fetchUVData(locationData.lat, locationData.lon, locationData.timezone),
-          fetchSunriseSunset(locationData.lat, locationData.lon),
-        ]);
+        const uvData = await fetchUVData(locationData.lat, locationData.lon, locationData.timezone);
 
-        // Update state
         state.location = locationData;
         state.uvData = uvData;
-        state.sunTimes = sunTimes;
         state.currentUV = getCurrentUVIndex(uvData);
         state.lastUpdated = new Date();
 
         updateUI(locationData, uvData);
-        renderChart(uvData, sunTimes);
         startAutoRefresh(locationData.lat, locationData.lon, locationData.timezone);
       } catch (err) {
         handleError(err.type || "GEOCODING_ERROR");
